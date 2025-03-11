@@ -1,6 +1,25 @@
 SELECT 
     -- PR
-    PD.*,
+    PD.DISTRIBUTION_ID,
+    PD.PR_Number,
+    PD.PR_Description,
+    PD.PR_Creation_Date,
+    PD.PR_Status,
+    PD.PR_Line_No,
+    PD.PR_Quantity,
+    PD.Unit_Price,
+    PD.PR_Line_Amount_OMR,
+    PD.Currency,
+    PD.RUSH_FLAG,
+    PD.NEED_BY_DATE,
+    PD."PR Latest Approved Date",
+    PD."PR Original Approved Date",
+    PD."Item Code",
+    PD."Item Description",
+    PD."Item Type",
+    PD."Sourced Or Unsourced",
+    PD."PR Requestor",
+    PD."PR Approval Pending With",
 
     -- RFQ
     AD.DOCUMENT_NUMBER as "RFQ Number",
