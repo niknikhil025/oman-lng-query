@@ -374,8 +374,17 @@ FULL OUTER JOIN (
         AND pbr.REQUISITION_LINE_ID = prl.REQUISITION_LINE_ID
     JOIN 
         PO_REQ_DISTRIBUTIONS_ALL prd ON prl.REQUISITION_LINE_ID = prd.REQUISITION_LINE_ID
-    WHERE ph.AUCTION_HEADER_ID is not null
-) AD ON PD.DISTRIBUTION_ID=AD.DISTRIBUTION_ID 
+    WHERE ph.AUCTION_HEADER_ID IN (
+        SELECT AUCTION_HEADER_ID
+        FROM (
+            SELECT AUCTION_HEADER_ID,
+                   AUCTION_ROUND_NUMBER,
+                   ROW_NUMBER() OVER (PARTITION BY AUCTION_HEADER_ID ORDER BY AUCTION_ROUND_NUMBER DESC) as rn
+            FROM pon_auction_headers_all_v
+        ) t
+        WHERE rn = 1
+    )
+) AD ON PD.DISTRIBUTION_ID = AD.DISTRIBUTION_ID
 
 LEFT JOIN gl_code_combinations GCC ON PDA.code_combination_id = GCC.code_combination_id
 LEFT JOIN wip_entities WE ON PDA.wip_entity_id = WE.wip_entity_id
