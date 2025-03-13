@@ -9,7 +9,7 @@ SELECT
     PD.PR_Quantity,
     PD.Unit_Price,
     PD.PR_Line_Amount_OMR,
-    PD.Currency,
+    PD."PR Line Currency",
     PD.RUSH_FLAG,
     PD.NEED_BY_DATE,
     PD."PR Latest Approved Date",
@@ -85,9 +85,10 @@ SELECT
     (select MAX(amount_limit) from po_headers_archive_all PHHA where segment1 = PHA.SEGMENT1) AS "ACV AMOUNT",
     PLLA.quantity AS "PO Order Qty",
     (PLLA.price_override * PLLA.quantity) AS "PO Order Amount", -- Changed
+    NVL(PHA.CURRENCY_CODE, 'USD') as "PO ORDER CURRENCY",
     CASE
         WHEN NVL(PHA.rate, 0) = 0 THEN PLLA.price_override * PLLA.quantity
-        ELSE ROUND((PLLA.price_override * PLLA.quantity) / NVL(PHA.rate, 1), 2)
+        ELSE (PLLA.price_override * PLLA.quantity) * NVL(PHA.rate, 1)
     END AS "PO Order Amount (USD)", -- changed
 
     (
@@ -125,10 +126,10 @@ SELECT
     RSL.line_num as "Receipt line No",
     RT.quantity as "Receipt Qty",
     (PLLA.price_override * RT.QUANTITY) AS "Receipt Amount",
-    NVL(RT.CURRENCY_CODE, 'USD') AS "Currency",
+    NVL(RT.CURRENCY_CODE, 'USD') AS "Receipt Currency",
     CASE
         WHEN NVL(RT.CURRENCY_CONVERSION_RATE, 0) = 0 THEN PLLA.price_override * RT.QUANTITY
-        ELSE ROUND((PLLA.price_override * RT.QUANTITY) / NVL(RT.CURRENCY_CONVERSION_RATE, 1), 2)
+        ELSE (PLLA.price_override * RT.QUANTITY) * NVL(RT.CURRENCY_CONVERSION_RATE, 1)
     END AS "Receipt Amount (USD)",
     -- (SELECT user_name from fnd_user where user_id=RSL.last_updated_by) as "Received By",
     (select FULL_NAME from fnd_user fu join per_all_people_f papf on fu.user_id=papf.person_id
@@ -254,14 +255,20 @@ SELECT
     END AS "Match Status Flag",
     AIA.exchange_rate as "Exchange Rate",
     AIDA.amount AS "Invoice Amount",
+    AIA.INVOICE_CURRENCY_CODE AS "Invoice Currency",
     CASE
-        WHEN NVL(AIA.exchange_rate, 0) = 0 THEN NULL
-        ELSE ROUND(AIDA.amount / NVL(AIA.exchange_rate, 1), 2)
+        WHEN NVL(AIA.exchange_rate, 0) = 0 THEN AIDA.amount
+        ELSE AIDA.amount * NVL(AIA.exchange_rate, 1)
     END AS "Invoice Amount USD", -- changed
     
     -- PAYMENTS
     ACA.check_date as "Payment Date",
+    NVL(ACA.CURRENCY_CODE, 'USD') as "Payment Currency",
     ACA.amount as "Payment Amount",
+    CASE
+        WHEN NVL(ACA.EXCHANGE_RATE, 0) = 0 THEN ACA.amount
+        ELSE ACA.amount * ACA.EXCHANGE_RATE
+    END AS "Payment Amount (USD)",
     APSA.due_date as "Payment Due Date",
     APSA.PAYMENT_STATUS_FLAG as "Payment Status"
 
@@ -296,7 +303,7 @@ FULL OUTER JOIN
     PORLA.UNIT_PRICE AS Unit_Price,
     NVL(PORLA.QUANTITY, 0) * NVL(PORLA.UNIT_PRICE, 0) AS PR_Line_Amount_OMR,
     -- TODO Add USD Amount -- Add PR_Line_Amount_USD
-    NVL(PORLA.CURRENCY_CODE, 'USD') AS Currency,
+    NVL(PORLA.CURRENCY_CODE, 'USD') AS "PR Line Currency",
     PORLA.URGENT_FLAG AS RUSH_FLAG,
     PORLA.NEED_BY_DATE AS NEED_BY_DATE,
 

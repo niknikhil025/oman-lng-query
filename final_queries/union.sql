@@ -9,7 +9,7 @@ SELECT
     PD.PR_Quantity,
     PD.Unit_Price,
     PD.PR_Line_Amount_OMR,
-    PD.Currency,
+    PD."PR Line Currency",
     PD.RUSH_FLAG,
     PD.NEED_BY_DATE,
     PD."PR Latest Approved Date",
@@ -84,10 +84,11 @@ SELECT
     PPA.segment1 AS "Project Number",
     (select MAX(amount_limit) from po_headers_archive_all PHHA where segment1 = PHA.SEGMENT1) AS "ACV AMOUNT",
     PLLA.quantity AS "PO Order Qty",
-    (PLLA.price_override * PLLA.quantity) AS "PO Order Amount (OMR)", -- Changed
+    (PLLA.price_override * PLLA.quantity) AS "PO Order Amount", -- Changed
+    NVL(PHA.CURRENCY_CODE, 'USD') as "PO ORDER CURRENCY",
     CASE
-        WHEN NVL(PHA.rate, 0) = 0 THEN NULL
-        ELSE ROUND((PLLA.price_override * PLLA.quantity) / NVL(PHA.rate, 1), 2)
+        WHEN NVL(PHA.rate, 0) = 0 THEN PLLA.price_override * PLLA.quantity
+        ELSE (PLLA.price_override * PLLA.quantity) * NVL(PHA.rate, 1)
     END AS "PO Order Amount (USD)", -- changed
 
     (
@@ -125,14 +126,14 @@ SELECT
     RSL.line_num as "Receipt line No",
     RT.quantity as "Receipt Qty",
     (PLLA.price_override * RT.QUANTITY) AS "Receipt Amount",
-    NVL(RT.CURRENCY_CODE, 'USD') AS "Currency",
+    NVL(RT.CURRENCY_CODE, 'USD') AS "Receipt Currency",
     CASE
-        WHEN NVL(RT.CURRENCY_CONVERSION_RATE, 0) = 0 THEN NULL
-        ELSE ROUND((PLLA.price_override * RT.QUANTITY) / NVL(RT.CURRENCY_CONVERSION_RATE, 1), 2)
+        WHEN NVL(RT.CURRENCY_CONVERSION_RATE, 0) = 0 THEN PLLA.price_override * RT.QUANTITY
+        ELSE (PLLA.price_override * RT.QUANTITY) * NVL(RT.CURRENCY_CONVERSION_RATE, 1)
     END AS "Receipt Amount (USD)",
     -- (SELECT user_name from fnd_user where user_id=RSL.last_updated_by) as "Received By",
     (select FULL_NAME from fnd_user fu join per_all_people_f papf on fu.user_id=papf.person_id
-    AND TRUNC(SYSDATE) BETWEEN papf.effective_start_date AND papf.effective_end_date and fu.user_id=RSL.last_updated_by)
+    AND TRUNC(RSL.LAST_UPDATE_DATE) BETWEEN papf.effective_start_date AND papf.effective_end_date and fu.user_id=RSL.last_updated_by)
     as "Received By", -- changed
 
     -- Inspection
@@ -254,14 +255,20 @@ SELECT
     END AS "Match Status Flag",
     AIA.exchange_rate as "Exchange Rate",
     AIDA.amount AS "Invoice Amount",
+    AIA.INVOICE_CURRENCY_CODE AS "Invoice Currency",
     CASE
-        WHEN NVL(AIA.exchange_rate, 0) = 0 THEN NULL
-        ELSE ROUND(AIDA.amount / NVL(AIA.exchange_rate, 1), 2)
+        WHEN NVL(AIA.exchange_rate, 0) = 0 THEN AIDA.amount
+        ELSE AIDA.amount * NVL(AIA.exchange_rate, 1)
     END AS "Invoice Amount USD", -- changed
     
     -- PAYMENTS
     ACA.check_date as "Payment Date",
+    NVL(ACA.CURRENCY_CODE, 'USD') as "Payment Currency",
     ACA.amount as "Payment Amount",
+    CASE
+        WHEN NVL(ACA.EXCHANGE_RATE, 0) = 0 THEN ACA.amount
+        ELSE ACA.amount * ACA.EXCHANGE_RATE
+    END AS "Payment Amount (USD)",
     APSA.due_date as "Payment Due Date",
     APSA.PAYMENT_STATUS_FLAG as "Payment Status"
 
@@ -272,10 +279,12 @@ JOIN po_line_locations_all PLLA ON PLA.po_line_id = PLLA.po_line_id
 LEFT JOIN po_releases_all PRA ON PLLA.po_release_id = PRA.po_release_id
 
 -- ADDED LEFT JOIN WITH rcv_transactions TO GET RECORDS WITHOUT rcv_transactions
-LEFT JOIN rcv_transactions RT ON RT.po_header_id = PHA.po_header_id AND RT.PO_RELEASE_ID = PRA.PO_RELEASE_ID AND PLA.PO_LINE_ID=RT.PO_LINE_ID AND PLLA.LINE_LOCATION_ID=RT.PO_LINE_LOCATION_ID
+LEFT JOIN rcv_transactions RT ON RT.po_header_id = PHA.po_header_id AND RT.PO_RELEASE_ID = PRA.PO_RELEASE_ID 
+AND PLA.PO_LINE_ID=RT.PO_LINE_ID AND PLLA.LINE_LOCATION_ID=RT.PO_LINE_LOCATION_ID
 LEFT JOIN rcv_shipment_lines RSL ON RSL.shipment_line_id = RT.shipment_line_id
 LEFT JOIN rcv_shipment_headers RSH ON RSH.shipment_header_id = RSL.shipment_header_id
-LEFT JOIN po_distributions_all PDA ON PLLA.line_location_id = PDA.line_location_id AND RT.PO_DISTRIBUTION_ID=PDA.PO_DISTRIBUTION_ID
+LEFT JOIN po_distributions_all PDA ON PLLA.line_location_id = PDA.line_location_id 
+AND (RT.PO_DISTRIBUTION_ID=PDA.PO_DISTRIBUTION_ID OR RT.PO_DISTRIBUTION_ID is null)
 FULL OUTER JOIN 
 (
     SELECT 
@@ -293,7 +302,8 @@ FULL OUTER JOIN
     PORLA.QUANTITY AS PR_Quantity,
     PORLA.UNIT_PRICE AS Unit_Price,
     NVL(PORLA.QUANTITY, 0) * NVL(PORLA.UNIT_PRICE, 0) AS PR_Line_Amount_OMR,
-    NVL(PORLA.CURRENCY_CODE, 'USD') AS Currency,
+    -- TODO Add USD Amount -- Add PR_Line_Amount_USD
+    NVL(PORLA.CURRENCY_CODE, 'USD') AS "PR Line Currency",
     PORLA.URGENT_FLAG AS RUSH_FLAG,
     PORLA.NEED_BY_DATE AS NEED_BY_DATE,
 
@@ -357,7 +367,7 @@ LEFT JOIN xxolng_scm_srn_lines_all SRL ON SRL.srn_header_id = SRH.srn_header_id 
 -- ADDED ALL LINE_TYPE_LOOKUP_CODE INSTEAD OF FIXING FOR LINE TYPE AS ACCRUAL
 LEFT JOIN ap_invoice_distributions_all AIDA ON PDA.po_distribution_id = AIDA.po_distribution_id AND NVL(AIDA.CANCELLATION_FLAG, 'Y') = 'N'
 LEFT JOIN ap_invoice_lines_all AILA ON AIDA.invoice_id = AILA.invoice_id AND AIDA.invoice_line_number = AILA.line_number
-LEFT JOIN ap_invoices_all AIA ON AIDA.invoice_id = AIA.invoice_id AND AIA.CANCELLED_DATE is not null
+LEFT JOIN ap_invoices_all AIA ON AIDA.invoice_id = AIA.invoice_id
 
 LEFT JOIN ap_payment_schedules_all APSA ON AIA.invoice_id = APSA.invoice_id
 LEFT JOIN ap_invoice_payments_all AIPA ON AIA.invoice_id = AIPA.invoice_id AND AIPA.PAYMENT_NUM = APSA.PAYMENT_NUM
@@ -376,7 +386,7 @@ SELECT
     PD.PR_Quantity,
     PD.Unit_Price,
     PD.PR_Line_Amount_OMR,
-    PD.Currency,
+    PD."PR Line Currency",
     PD.RUSH_FLAG,
     PD.NEED_BY_DATE,
     PD."PR Latest Approved Date",
@@ -438,10 +448,11 @@ SELECT
     PPA.segment1 AS "Project Number",
     (select MAX(amount_limit) from po_headers_archive_all PHHA where segment1 = PHA.SEGMENT1) AS "ACV AMOUNT",
     PLLA.quantity AS "PO Order Qty",
-    (PLLA.price_override * PLLA.quantity) AS "PO Order Amount (OMR)", -- Changed
+    (PLLA.price_override * PLLA.quantity) AS "PO Order Amount", -- Changed
+    NVL(PHA.CURRENCY_CODE, 'USD') as "PO ORDER CURRENCY",
     CASE
-        WHEN NVL(PHA.rate, 0) = 0 THEN NULL
-        ELSE ROUND((PLLA.price_override * PLLA.quantity) / NVL(PHA.rate, 1), 2)
+        WHEN NVL(PHA.rate, 0) = 0 THEN PLLA.price_override * PLLA.quantity
+        ELSE (PLLA.price_override * PLLA.quantity) * NVL(PHA.rate, 1)
     END AS "PO Order Amount (USD)", -- changed
 
     (
@@ -479,14 +490,14 @@ SELECT
     RSL.line_num as "Receipt line No",
     RT.quantity as "Receipt Qty",
     (PLLA.price_override * RT.QUANTITY) AS "Receipt Amount",
-    NVL(RT.CURRENCY_CODE, 'USD') AS "Currency",
+    NVL(RT.CURRENCY_CODE, 'USD') AS "Receipt Currency",
     CASE
-        WHEN NVL(RT.CURRENCY_CONVERSION_RATE, 0) = 0 THEN NULL
-        ELSE ROUND((PLLA.price_override * RT.QUANTITY) / NVL(RT.CURRENCY_CONVERSION_RATE, 1), 2)
+        WHEN NVL(RT.CURRENCY_CONVERSION_RATE, 0) = 0 THEN PLLA.price_override * RT.QUANTITY
+        ELSE (PLLA.price_override * RT.QUANTITY) * NVL(RT.CURRENCY_CONVERSION_RATE, 1)
     END AS "Receipt Amount (USD)",
     -- (SELECT user_name from fnd_user where user_id=RSL.last_updated_by) as "Received By",
     (select FULL_NAME from fnd_user fu join per_all_people_f papf on fu.user_id=papf.person_id
-    AND TRUNC(SYSDATE) BETWEEN papf.effective_start_date AND papf.effective_end_date and fu.user_id=RSL.last_updated_by)
+    AND TRUNC(RSL.LAST_UPDATE_DATE) BETWEEN papf.effective_start_date AND papf.effective_end_date and fu.user_id=RSL.last_updated_by)
     as "Received By", -- changed
 
     -- Inspection
@@ -595,14 +606,20 @@ SELECT
     END AS "Match Status Flag",
     AIA.exchange_rate as "Exchange Rate",
     AIDA.amount AS "Invoice Amount",
+    AIA.INVOICE_CURRENCY_CODE AS "Invoice Currency",
     CASE
-        WHEN NVL(AIA.exchange_rate, 0) = 0 THEN NULL
-        ELSE ROUND(AIDA.amount / NVL(AIA.exchange_rate, 1), 2)
+        WHEN NVL(AIA.exchange_rate, 0) = 0 THEN AIDA.amount
+        ELSE AIDA.amount * NVL(AIA.exchange_rate, 1)
     END AS "Invoice Amount USD", -- changed
     
     -- PAYMENTS
     ACA.check_date as "Payment Date",
+    NVL(ACA.CURRENCY_CODE, 'USD') as "Payment Currency",
     ACA.amount as "Payment Amount",
+    CASE
+        WHEN NVL(ACA.EXCHANGE_RATE, 0) = 0 THEN ACA.amount
+        ELSE ACA.amount * ACA.EXCHANGE_RATE
+    END AS "Payment Amount (USD)",
     APSA.due_date as "Payment Due Date",
     APSA.PAYMENT_STATUS_FLAG as "Payment Status"
 
@@ -640,7 +657,7 @@ FULL OUTER JOIN
     PORLA.QUANTITY AS PR_Quantity,
     PORLA.UNIT_PRICE AS Unit_Price,
     NVL(PORLA.QUANTITY, 0) * NVL(PORLA.UNIT_PRICE, 0) AS PR_Line_Amount_OMR,
-    NVL(PORLA.CURRENCY_CODE, 'USD') AS Currency,
+    NVL(PORLA.CURRENCY_CODE, 'USD') AS "PR Line Currency",
     PORLA.URGENT_FLAG AS RUSH_FLAG,
     PORLA.NEED_BY_DATE AS NEED_BY_DATE,
 
@@ -746,8 +763,8 @@ FULL OUTER JOIN (
         SELECT AUCTION_HEADER_ID
         FROM (
             SELECT AUCTION_HEADER_ID,
-                   AUCTION_ROUND_NUMBER,
-                   ROW_NUMBER() OVER (PARTITION BY AUCTION_HEADER_ID ORDER BY AUCTION_ROUND_NUMBER DESC) as rn
+                   CREATION_DATE,
+                   ROW_NUMBER() OVER (PARTITION BY AUCTION_HEADER_ID ORDER BY CREATION_DATE DESC) as rn
             FROM pon_auction_headers_all_v
         ) t
         WHERE rn = 1
@@ -764,7 +781,7 @@ LEFT JOIN pa_projects_all PPA ON PDA.project_id = PPA.project_id
 -- ADDED ALL LINE_TYPE_LOOKUP_CODE INSTEAD OF FIXING FOR LINE TYPE AS ACCRUAL
 LEFT JOIN ap_invoice_distributions_all AIDA ON PDA.po_distribution_id = AIDA.po_distribution_id AND NVL(AIDA.CANCELLATION_FLAG, 'Y') = 'N'
 LEFT JOIN ap_invoice_lines_all AILA ON AIDA.invoice_id = AILA.invoice_id AND AIDA.invoice_line_number = AILA.line_number AND NVL(AILA.CANCELLED_FLAG,'Y')='N'
-LEFT JOIN ap_invoices_all AIA ON AIDA.invoice_id = AIA.invoice_id AND AIA.CANCELLED_DATE is not null
+LEFT JOIN ap_invoices_all AIA ON AIDA.invoice_id = AIA.invoice_id
 LEFT JOIN ap_payment_schedules_all APSA ON AIA.invoice_id = APSA.invoice_id
 LEFT JOIN ap_invoice_payments_all AIPA ON AIA.invoice_id = AIPA.invoice_id AND AIPA.PAYMENT_NUM = APSA.PAYMENT_NUM
 LEFT JOIN ap_checks_all ACA ON AIPA.check_id = ACA.check_id;
