@@ -124,7 +124,8 @@ SELECT
     RSH.creation_date AS "Receipt Date",
     RSL.line_num as "Receipt line No",
     RT.quantity as "Receipt Qty",
-    (PLLA.price_override * RT.QUANTITY) AS "Receipt Amount (OMR)",
+    (PLLA.price_override * RT.QUANTITY) AS "Receipt Amount",
+    NVL(RT.CURRENCY_CODE, 'USD') AS "Currency",
     CASE
         WHEN NVL(RT.CURRENCY_CONVERSION_RATE, 0) = 0 THEN NULL
         ELSE ROUND((PLLA.price_override * RT.QUANTITY) / NVL(RT.CURRENCY_CONVERSION_RATE, 1), 2)
@@ -265,7 +266,7 @@ SELECT
     APSA.PAYMENT_STATUS_FLAG as "Payment Status"
 
 FROM
-     po_headers_all PHA
+    po_headers_all PHA
 JOIN po_lines_all PLA ON PHA.po_header_id = PLA.po_header_id AND PHA.TYPE_LOOKUP_CODE='BLANKET'
 JOIN po_line_locations_all PLLA ON PLA.po_line_id = PLLA.po_line_id
 LEFT JOIN po_releases_all PRA ON PLLA.po_release_id = PRA.po_release_id
@@ -477,7 +478,8 @@ SELECT
     RSH.creation_date AS "Receipt Date",
     RSL.line_num as "Receipt line No",
     RT.quantity as "Receipt Qty",
-    (PLLA.price_override * RT.QUANTITY) AS "Receipt Amount (OMR)",
+    (PLLA.price_override * RT.QUANTITY) AS "Receipt Amount",
+    NVL(RT.CURRENCY_CODE, 'USD') AS "Currency",
     CASE
         WHEN NVL(RT.CURRENCY_CONVERSION_RATE, 0) = 0 THEN NULL
         ELSE ROUND((PLLA.price_override * RT.QUANTITY) / NVL(RT.CURRENCY_CONVERSION_RATE, 1), 2)
@@ -761,10 +763,8 @@ LEFT JOIN pa_projects_all PPA ON PDA.project_id = PPA.project_id
 
 -- ADDED ALL LINE_TYPE_LOOKUP_CODE INSTEAD OF FIXING FOR LINE TYPE AS ACCRUAL
 LEFT JOIN ap_invoice_distributions_all AIDA ON PDA.po_distribution_id = AIDA.po_distribution_id AND NVL(AIDA.CANCELLATION_FLAG, 'Y') = 'N'
-LEFT JOIN ap_invoice_lines_all AILA ON AIDA.invoice_id = AILA.invoice_id AND AIDA.invoice_line_number = AILA.line_number
+LEFT JOIN ap_invoice_lines_all AILA ON AIDA.invoice_id = AILA.invoice_id AND AIDA.invoice_line_number = AILA.line_number AND NVL(AILA.CANCELLED_FLAG,'Y')='N'
 LEFT JOIN ap_invoices_all AIA ON AIDA.invoice_id = AIA.invoice_id AND AIA.CANCELLED_DATE is not null
-
 LEFT JOIN ap_payment_schedules_all APSA ON AIA.invoice_id = APSA.invoice_id
 LEFT JOIN ap_invoice_payments_all AIPA ON AIA.invoice_id = AIPA.invoice_id AND AIPA.PAYMENT_NUM = APSA.PAYMENT_NUM
-LEFT JOIN ap_checks_all ACA ON AIPA.check_id = ACA.check_id
-FETCH FIRST 10 ROWS ONLY;
+LEFT JOIN ap_checks_all ACA ON AIPA.check_id = ACA.check_id;

@@ -71,9 +71,9 @@ SELECT
     PPA.segment1 AS "Project Number",
     (select MAX(amount_limit) from po_headers_archive_all PHHA where segment1 = PHA.SEGMENT1) AS "ACV AMOUNT",
     PLLA.quantity AS "PO Order Qty",
-    (PLLA.price_override * PLLA.quantity) AS "PO Order Amount (OMR)", -- Changed
+    (PLLA.price_override * PLLA.quantity) AS "PO Order Amount", -- Changed
     CASE
-        WHEN NVL(PHA.rate, 0) = 0 THEN NULL
+        WHEN NVL(PHA.rate, 0) = 0 THEN PLLA.price_override * PLLA.quantity
         ELSE ROUND((PLLA.price_override * PLLA.quantity) / NVL(PHA.rate, 1), 2)
     END AS "PO Order Amount (USD)", -- changed
 
@@ -111,14 +111,15 @@ SELECT
     RSH.creation_date AS "Receipt Date",
     RSL.line_num as "Receipt line No",
     RT.quantity as "Receipt Qty",
-    (PLLA.price_override * RT.QUANTITY) AS "Receipt Amount (OMR)",
+    (PLLA.price_override * RT.QUANTITY) AS "Receipt Amount",
+    NVL(RT.CURRENCY_CODE, 'USD') AS "Currency",
     CASE
-        WHEN NVL(RT.CURRENCY_CONVERSION_RATE, 0) = 0 THEN NULL
+        WHEN NVL(RT.CURRENCY_CONVERSION_RATE, 0) = 0 THEN PLLA.price_override * RT.QUANTITY
         ELSE ROUND((PLLA.price_override * RT.QUANTITY) / NVL(RT.CURRENCY_CONVERSION_RATE, 1), 2)
     END AS "Receipt Amount (USD)",
     -- (SELECT user_name from fnd_user where user_id=RSL.last_updated_by) as "Received By",
     (select FULL_NAME from fnd_user fu join per_all_people_f papf on fu.user_id=papf.person_id
-    AND TRUNC(SYSDATE) BETWEEN papf.effective_start_date AND papf.effective_end_date and fu.user_id=RSL.last_updated_by)
+    AND TRUNC(RSL.LAST_UPDATE_DATE) BETWEEN papf.effective_start_date AND papf.effective_end_date and fu.user_id=RSL.last_updated_by)
     as "Received By", -- changed
 
     -- Inspection
@@ -395,10 +396,8 @@ LEFT JOIN pa_projects_all PPA ON PDA.project_id = PPA.project_id
 
 -- ADDED ALL LINE_TYPE_LOOKUP_CODE INSTEAD OF FIXING FOR LINE TYPE AS ACCRUAL
 LEFT JOIN ap_invoice_distributions_all AIDA ON PDA.po_distribution_id = AIDA.po_distribution_id AND NVL(AIDA.CANCELLATION_FLAG, 'Y') = 'N'
-LEFT JOIN ap_invoice_lines_all AILA ON AIDA.invoice_id = AILA.invoice_id AND AIDA.invoice_line_number = AILA.line_number
-LEFT JOIN ap_invoices_all AIA ON AIDA.invoice_id = AIA.invoice_id AND AIA.CANCELLED_DATE is not null
-
+LEFT JOIN ap_invoice_lines_all AILA ON AIDA.invoice_id = AILA.invoice_id AND AIDA.invoice_line_number = AILA.line_number AND NVL(AILA.CANCELLED_FLAG,'Y')='N'
+LEFT JOIN ap_invoices_all AIA ON AIDA.invoice_id = AIA.invoice_id
 LEFT JOIN ap_payment_schedules_all APSA ON AIA.invoice_id = APSA.invoice_id
 LEFT JOIN ap_invoice_payments_all AIPA ON AIA.invoice_id = AIPA.invoice_id AND AIPA.PAYMENT_NUM = APSA.PAYMENT_NUM
-LEFT JOIN ap_checks_all ACA ON AIPA.check_id = ACA.check_id
-FETCH FIRST 10 ROWS ONLY;
+LEFT JOIN ap_checks_all ACA ON AIPA.check_id = ACA.check_id;

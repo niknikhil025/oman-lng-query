@@ -1,0 +1,24 @@
+- check currency and values;
+
+- fnd user not founf
+select * from fnd_user where user_id=1723;
+select * from per_all_people_f where person_id=1723;
+for 
+WHERE 
+PHA.segment1='4040054' and PRA.release_num=5;
+
+- take latest for rfq instead of max round number;
+
+
+WHERE PR_NUMBER='1071303';
+FETCH FIRST 10 ROWS ONLY;
+
+-- FETCH FIRST 10 ROWS ONLY;
+-- WHERE PR_NUMBER='1071303';
+-- WHERE PD.PR_Number='1071303'
+
+--  and PRA.release_num=6; --- PR not showing
+-- WHERE PDA.REQ_DISTRIBUTION_ID='1379795';
+WHERE 
+-- PHA.segment1='4040054' and PRA.release_num=5;
+AIA.invoice_num='1020-0330643' 
