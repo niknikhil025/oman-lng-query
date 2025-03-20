@@ -1,18 +1,24 @@
 ==========SPA ============
 PR amount still not in USD
 => To Check With Younus
+SOLN
+=> Missing Rate => Found = PORLA.RATE
 
 PR_NUMBER='1003544' and PR_LINE_NO=306 -- RFQ still not correct
 => Fixed
 
 PR_NUMBER='1003544' and PR_LINE_NO=305 -- RFQ status is not correct - "Completed, Purchase Order Not Requested (Unlocked)'
 => To Check With Younus 
+SOLN
+=> Got Code
 
 PR_NUMBER='1003544' and PR_LINE_NO=305 -- RFQ Type is not correct - 'Multiple Source'
-=> To Check With Younus 
+=> To Check With Younus => Still Pending
 
 RFQ Stage is blank
 => To Check With Younus 
+SOLN
+=> Can be removed
 
 PO Order Amount (OMR)  -- This can be in any currency. U should have a column for currency to show that.
 => Done
@@ -32,8 +38,8 @@ PHA.segment1='4032468' and PLA.line_num=1  -- PO Order Amount (USD) not correct
 PHA.segment1='4032468' and PLA.line_num=1  -- REceipt Amount (USD) not correct
 => Done
 
-PHA.segment1='4032468' and PLA.line_num=1  -- REceipt by is null.
-=> To Check With Younus 
+PHA.segment1='4032468' and PLA.line_num=1  -- Receipt by is null.
+=> To Check With Younus  => Fixed
 
 PHA.segment1='4032468' and PLA.line_num=1  -- Invoice Amount in USD is correct
 => Fixed
@@ -46,6 +52,8 @@ Payment Amount USD missing
 
 Invoice No - 115903 -- Payment Amount should be 4840 but it showing as 5276. We should be able to track payment amount in invoice level.
 => To Check With Younus 
+SOLN
+FIXED
 
 ============BPA===========
 PHA.segment1='4040054' and PRA.release_num=6 --- PR not showing
@@ -59,8 +67,12 @@ PHA.segment1='4040054' and PRA.release_num=5 -- REceipt ampunt (omr) not correct
 
 PHA.segment1='4040054' and PRA.release_num=5 -- Received by null
 => To Check With Younus 
-select * from fnd_user where user_id=1723;
+select employee_id from fnd_user where user_id=1723;
 select * from per_all_people_f where person_id=1723;
+SOLN
+=> Fixed
 
 AIA.invoice_num='1020-0330643' -- Payment amount should be around 28688 but its showing as 164202.
-=> To Check With Younus 
+=> To Check With Younus
+SOLN
+Fixed

@@ -33,7 +33,6 @@ SELECT
     AD.RFQ_SUBMIT_DATE as "RFQ Submit Date",
     AD.PUBLISH_DATE as "RFQ Publish Date",
     AD.FULL_NAME as "Buyer Name",
-    null as "RFQ Stage",
 
     -- PO
     PHA.segment1 AS "PO Number",
@@ -119,7 +118,7 @@ SELECT
         ELSE (PLLA.price_override * RT.QUANTITY) * NVL(RT.CURRENCY_CONVERSION_RATE, 1)
     END AS "Receipt Amount (USD)",
     -- (SELECT user_name from fnd_user where user_id=RSL.last_updated_by) as "Received By",
-    (select FULL_NAME from fnd_user fu join per_all_people_f papf on fu.user_id=papf.person_id
+    (select FULL_NAME from fnd_user fu join per_all_people_f papf on fu.employee_id=papf.person_id
     AND TRUNC(RSL.LAST_UPDATE_DATE) BETWEEN papf.effective_start_date AND papf.effective_end_date and fu.user_id=RSL.last_updated_by)
     as "Received By", -- changed
 
@@ -238,10 +237,10 @@ SELECT
     -- PAYMENTS
     ACA.check_date as "Payment Date",
     NVL(ACA.CURRENCY_CODE, 'USD') as "Payment Currency",
-    ACA.amount as "Payment Amount",
+    AIPA.amount as "Payment Amount",
     CASE
-        WHEN NVL(ACA.EXCHANGE_RATE, 0) = 0 THEN ACA.amount
-        ELSE ACA.amount * ACA.EXCHANGE_RATE
+        WHEN NVL(ACA.EXCHANGE_RATE, 0) = 0 THEN AIPA.amount
+        ELSE AIPA.amount * ACA.EXCHANGE_RATE
     END AS "Payment Amount (USD)",
     APSA.due_date as "Payment Due Date",
     APSA.PAYMENT_STATUS_FLAG as "Payment Status"
@@ -281,6 +280,11 @@ FULL OUTER JOIN
     PORLA.UNIT_PRICE AS Unit_Price,
     NVL(PORLA.QUANTITY, 0) * NVL(PORLA.UNIT_PRICE, 0) AS PR_Line_Amount_OMR,
     NVL(PORLA.CURRENCY_CODE, 'USD') AS "PR Line Currency",
+    CASE
+        WHEN NVL(PORLA.RATE, 0) = 0 THEN NVL(PORLA.QUANTITY, 0) * NVL(PORLA.UNIT_PRICE, 0)
+        ELSE NVL(PORLA.QUANTITY, 0) * NVL(PORLA.UNIT_PRICE, 0) * NVL(PORLA.RATE, 0)
+    END AS "PR_Line_Amount",
+
     PORLA.URGENT_FLAG AS RUSH_FLAG,
     PORLA.NEED_BY_DATE AS NEED_BY_DATE,
 
@@ -343,7 +347,8 @@ FULL OUTER JOIN (
     SELECT 
     ph.DOCUMENT_NUMBER as DOCUMENT_NUMBER,
     ph.AUCTION_STATUS as AUCTION_STATUS,
-    ph.AUCTION_ORIGINATION_CODE as AUCTION_ORIGINATION_CODE,
+    -- ph.AUCTION_ORIGINATION_CODE as AUCTION_ORIGINATION_CODE,
+    DECODE(ph.BID_VISIBILITY_CODE, 'SEALED_AUCTION', 'SEALED','SEALED_BIDDING', 'BLIND') as AUCTION_ORIGINATION_CODE,
     ph.CREATION_DATE as CREATION_DATE,
     ph.CLOSE_BIDDING_DATE as CLOSE_BIDDING_DATE, 
     ph.INT_ATTRIBUTE6 AS INT_ATTRIBUTE6,
@@ -408,9 +413,3 @@ LEFT JOIN ap_invoices_all AIA ON AIDA.invoice_id = AIA.invoice_id
 LEFT JOIN ap_payment_schedules_all APSA ON AIA.invoice_id = APSA.invoice_id
 LEFT JOIN ap_invoice_payments_all AIPA ON AIA.invoice_id = AIPA.invoice_id AND AIPA.PAYMENT_NUM = APSA.PAYMENT_NUM
 LEFT JOIN ap_checks_all ACA ON AIPA.check_id = ACA.check_id;
-
--- WHERE
--- -- PD.PR_Number='1003544' and PD.PR_LINE_NO=306;
--- -- PD.PR_Number='1040760' and PD.PR_LINE_NO=4;
--- PHA.segment1='4032468' and PLA.line_num=1;
-
